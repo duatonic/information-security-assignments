@@ -9,7 +9,7 @@ def receive_messages(client_socket, des):
             message = message.decode()
             if not message:
                 break
-            print(des.decrypt(message))  # Replace with DES decryption as needed
+            print(des.decrypt(message))
         except ConnectionError:
             break
 
@@ -33,7 +33,7 @@ def main():
         message = input()
         if message.lower() == "exit":
             break
-        encrypted_message = des.encrypt(message)  # Replace with DES encryption as needed
+        encrypted_message = des.encrypt(message)
         encrypted_message = encrypted_message.encode()
         client_socket.sendall(encrypted_message)
 
