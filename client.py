@@ -6,16 +6,20 @@ def receive_messages(client_socket, des):
     while True:
         try:
             message = client_socket.recv(1024)
+            message = message.decode()
+
             if not message:
                 break
-            decrypted_message = des.decrypt(message.decode())
-            print("\t\t\tDecrypted message:", decrypted_message)
+            
+            print("\t\t\t\tReceived Encrypted:", message)
+            print("\t\t\t\t", des.decrypt(message))
+
         except ConnectionError:
             break
 
 def main():
     host = '127.0.0.1'
-    port = 12001
+    port = 12002
 
     # Create a TCP socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -33,10 +37,8 @@ def main():
         message = input()
         if message.lower() == "exit":
             break
-        padded_message = des.pad(message)
         encrypted_message = des.encrypt(message)
-        print("Padded message:", padded_message)
-        print("Encrypted message:", encrypted_message)
+        print("Sent Encrypted:", encrypted_message)
         client_socket.sendall(encrypted_message.encode())
 
     client_socket.close()

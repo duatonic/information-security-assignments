@@ -169,6 +169,7 @@ class DES:
     def encrypt(self, input):
         input = self.pad(input)
         encrypted = ''
+        
         for i in range(0, len(input), 8):
             block = input[i:i+8]
             block = self.str_to_bin(block)
