@@ -1,7 +1,8 @@
 import socket
 import threading
+import des as encryption
 
-def handle_client(client_socket, other_client):
+def handle_client(client_socket, other_client, des):
     while True:
         try:
             message = client_socket.recv(1024)
@@ -33,9 +34,12 @@ def main():
     client2, addr2 = server_socket.accept()
     print(f"Connected to Client 2 ({client2}) at {addr2}")
 
+    # create DES object
+    des = encryption.DES('keyganmk')
+
     # Start a thread for each client to handle bidirectional communication
-    threading.Thread(target=handle_client, args=(client1, client2)).start()
-    threading.Thread(target=handle_client, args=(client2, client1)).start()
+    threading.Thread(target=handle_client, args=(client1, client2, des)).start()
+    threading.Thread(target=handle_client, args=(client2, client1, des)).start()
 
 if __name__ == "__main__":
     main()

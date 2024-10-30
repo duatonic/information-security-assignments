@@ -158,24 +158,41 @@ class DES:
         block = self.sbox(block)
         return self.permute(block, PERMUTATION)
     
+    def pad(self, s):
+        padding_len = 8 - (len(s) % 8)
+        return s + chr(padding_len) * padding_len
+    
+    def unpad(self, s):
+        padding_len = ord(s[-1])
+        return s[:-padding_len]
+
     def encrypt(self, input):
-        input = self.str_to_bin(input)
-        input = self.permute(input, IP)
+        input = self.pad(input)
+        encrypted = ''
+        for i in range(0, len(input), 8):
+            block = input[i:i+8]
+            block = self.str_to_bin(block)
+            block = self.permute(block, IP)
 
-        l, r = input[:32], input[32:]
+            l, r = block[:32], block[32:]
 
-        for subkey in self.subkeys:
-            l, r = r, self.xor(l, self.f_function(r, subkey))
+            for subkey in self.subkeys:
+                l, r = r, self.xor(l, self.f_function(r, subkey))
 
-        return self.bin_to_str(self.permute(r + l, IP_INVERSE))
+            encrypted += self.bin_to_str(self.permute(r + l, IP_INVERSE))
+        return encrypted
     
     def decrypt(self, encrypted):
-        encrypted = self.str_to_bin(encrypted)
-        encrypted = self.permute(encrypted, IP)
+        decrypted = ''
+        for i in range(0, len(encrypted), 8):
+            block = encrypted[i:i+8]
+            block = self.str_to_bin(block)
+            block = self.permute(block, IP)
 
-        l, r = encrypted[:32], encrypted[32:]
+            l, r = block[:32], block[32:]
 
-        for subkey in reversed(self.subkeys):
-            l, r = r, self.xor(l, self.f_function(r, subkey))
+            for subkey in reversed(self.subkeys):
+                l, r = r, self.xor(l, self.f_function(r, subkey))
 
-        return self.bin_to_str(self.permute(r + l, IP_INVERSE))
+            decrypted += self.bin_to_str(self.permute(r + l, IP_INVERSE))
+        return self.unpad(decrypted)
