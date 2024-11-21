@@ -1,1 +1,7 @@
 *__pycache__*
+testo.py
+run.py
+keys/private/*
+keys/public/*
+!keys/private/
+!keys/public/
