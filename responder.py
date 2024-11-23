@@ -12,7 +12,7 @@ class Request:
         self.dst = dst
 
     def to_json(self):
-        return {"src": self.src, "dst": self.dst}
+        return json.dumps(self.__dict__)
 
 class HandshakePacket:
     def __init__(self, id, nonce):
@@ -20,12 +20,11 @@ class HandshakePacket:
         self.nonce = nonce
 
     def to_json(self):
-        return {"id": self.id, "nonce": self.nonce}
+        return json.dumps(self.__dict__)
 
 class Responder:
-    def __init__(self, id, des_key, pka_host='localhost', pka_port=11999, host='localhost', port=12001):
+    def __init__(self, id, pka_host='localhost', pka_port=11999, host='localhost', port=12001):
         self.id = id
-        self.des_key = des_key
         self.rsa = RSA(self.id)
         self.keys = self.rsa.keys
         self.public_keys = {}
@@ -49,19 +48,20 @@ class Responder:
             self.get_pka_public_key()
 
             request = Request(self.id, target_id)
-            s.sendall(json.dumps(request.to_json()).encode())
+            cipher_request = self.rsa.encrypt(request.to_json(), self.public_keys["pka"])
+            s.sendall(cipher_request.encode())
 
             response = s.recv(1024).decode()
-            ciphertext = json.loads(response)
+            decrypted_response = self.rsa.decrypt(response)
 
-            decrypted_response = self.rsa.decrypt(ciphertext, self.public_keys["pka"])
-
-        return eval(json.loads(decrypted_response))
+        return json.loads(decrypted_response)
 
     def handle_handshake(self, client):
         try:
             encrypted_handshake_request = client.recv(1024).decode()
-            handshake_request = eval(self.rsa.decrypt(json.loads(encrypted_handshake_request)))
+            decrypted_handshake_request = self.rsa.decrypt(encrypted_handshake_request)
+            handshake_request = json.loads(decrypted_handshake_request)
+
             initiator_id = handshake_request["id"]
             initiator_nonce = handshake_request["nonce"]
 
@@ -75,15 +75,17 @@ class Responder:
             nonce = self.generate_nonce()
             combined_nonce = f"{initiator_nonce}{nonce}"
 
-            response_handshake = HandshakePacket(self.id, combined_nonce)
-            encrypted_response_handshake = self.rsa.encrypt(json.dumps(response_handshake.to_json()), self.public_keys["initiator"])
-            client.sendall(json.dumps(encrypted_response_handshake).encode())
+            handshake = HandshakePacket(self.id, combined_nonce)
+            encrypted_handshake = self.rsa.encrypt(handshake.to_json(), self.public_keys["initiator"])
+            client.sendall(encrypted_handshake.encode())
 
-            encrypted_reply_handshake = client.recv(1024).decode()
-            decrypted_reply_handshake = eval(self.rsa.decrypt(json.loads(encrypted_reply_handshake)))
-            decrypted_nonce = decrypted_reply_handshake["nonce"]
+            encrypted_response_handshake = client.recv(1024).decode()
+            decrypted_response_handshake = self.rsa.decrypt(encrypted_response_handshake)
+            handshake_response = json.loads(decrypted_response_handshake)
 
-            if str(nonce) not in decrypted_nonce:
+            response_nonce = handshake_response["nonce"]
+
+            if str(nonce) not in response_nonce:
                 print("<handshake failed>: nonces do not match")
                 return False
 
@@ -148,7 +150,7 @@ class Responder:
                         client.sendall(des_encrypted_message.encode())
 
                     except KeyboardInterrupt:
-                        print("<connection interrupted>")
+                        print("<terminated by user>")
                         break
 
                     except ConnectionError:
@@ -159,6 +161,6 @@ class Responder:
                 client.close()
 
 if __name__ == "__main__":
-    des_key = "response"  # Example DES key
-    responder = Responder("responder", des_key)
+    responder = Responder("responder")
+
     responder.start_responder()

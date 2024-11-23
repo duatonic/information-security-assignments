@@ -32,49 +32,51 @@ class PublicKeyAuthority:
 
     def handle_request(self, client):
         data = client.recv(1024).decode()
+        decrypted_data = self.rsa.decrypt(data)
+
         response = Response()
 
         try:
-            request = json.loads(data)
+            request = json.loads(decrypted_data)
 
             if request['dst'] not in self.public_keys:
                 response.status = "error"
-                response.message = "requested public key not found"
+                response.message = "<error>: requested public key not found"
             elif request['src'] not in self.public_keys:
                 response.status = "error"
-                response.message = "unauthorized request"
+                response.message = "<error>: unauthorized request"
             else:
                 response.status = "success"
                 response.message = self.public_keys[request['dst']]
-                print(f"Sent public key for {request['dst']} to {request['src']} = {self.public_keys[request['dst']]}")
+                print(f"<success>: sent public key for {request['dst']} to {request['src']}: {self.public_keys[request['dst']]}")
 
         except json.JSONDecodeError:
             response.status = "error"
-            response.message = "invalid JSON request"
+            response.message = "<error>: invalid JSON request"
         
-        return json.dumps(response.to_json())
+        return response, request['src']
 
     def start_server(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
         server_socket.listen(5)
-        print(f"PKA is running on {self.host}:{self.port}")
+        print(f"<PKA is running on {self.host}:{self.port}>")
 
         while True:
             try:
                 client, addr = server_socket.accept()
                 self.read_public_Keys()
-                print("public keys:", pka.public_keys)
+                print("<public keys>:", pka.public_keys)
                 
-                response = self.handle_request(client)
-                ciphertext = self.rsa.encrypt(response, self.keys["private_key"])
+                response, src = self.handle_request(client)
+                ciphertext = self.rsa.encrypt(response.to_json(), self.public_keys[src])
 
-                client.sendall(json.dumps(ciphertext).encode())
-            
+                client.sendall(ciphertext.encode())
+
                 client.close()
 
             except KeyboardInterrupt:
-                print("Shutting down PKA server")
+                print("<shutting down PKA server>")
                 break
 
         server_socket.close()
@@ -82,5 +84,4 @@ class PublicKeyAuthority:
 if __name__ == "__main__":
     pka = PublicKeyAuthority("pka")
 
-    # Start the server
     pka.start_server()
