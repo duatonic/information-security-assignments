@@ -2,6 +2,7 @@ import socket
 import random
 import json
 import os
+import threading
 from RSA import RSA
 from des import DES
 
@@ -56,66 +57,101 @@ class Initiator:
             decrypted_response = self.rsa.decrypt(ciphertext, self.public_keys["pka"])
 
         return eval(json.loads(decrypted_response))
-
-    def initiate_handshake_and_exchange(self):
-        # Step 1: Retrieve Responder's public key from PKA
-        responder_public_key = self.get_responder_public_key("responder")
-        if responder_public_key['status'] == "error":
-            print("Failed to retrieve Responder's public key from PKA")
-            return
-        else:
-            self.public_keys["responder"] = responder_public_key['message']
-        
-        nonce = self.generate_nonce()
-        print(f"Generated nonce: {nonce}")
-
-        # Step 2: Send handshake packet to Responder
-
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.responder_host, self.responder_port))
+    
+    def handle_handshake(self, client):
+        try:
+            nonce = self.generate_nonce()
 
             handshake_packet = HandshakePacket(self.id, nonce)
+
             encrypted_handshake = self.rsa.encrypt(json.dumps(handshake_packet.to_json()), self.public_keys["responder"])
-            s.sendall(json.dumps(encrypted_handshake).encode())
+            client.sendall(json.dumps(encrypted_handshake).encode())
 
-            # Step 3: Receive and verify handshake response
-            response = s.recv(1024).decode()
-            ciphertext = json.loads(response)
+            response = client.recv(1024).decode()
+            cipher_response = json.loads(response)
 
-            decrypted_response = eval(self.rsa.decrypt(ciphertext))
-            print(f"Received response: {decrypted_response}")
+            decrypted_response = eval(self.rsa.decrypt(cipher_response))
 
             combined_nonce = decrypted_response['nonce']
             if str(nonce) not in combined_nonce:
-                print("Handshake failed!")
-                return
+                print("<handshake failed>")
+                return False
             else:
                 responder_nonce = combined_nonce[len(combined_nonce)//2:]
-                handshake_back = HandshakePacket(self.id, responder_nonce)
-                encrypted_handshake_back = self.rsa.encrypt(json.dumps(handshake_back.to_json()), self.public_keys["responder"])
-                s.sendall(json.dumps(encrypted_handshake_back).encode())
+                handshake_reply = HandshakePacket(self.id, responder_nonce)
+                encrypted_handshake_reply = self.rsa.encrypt(json.dumps(handshake_reply.to_json()), self.public_keys["responder"])
+                client.sendall(json.dumps(encrypted_handshake_reply).encode())
 
-            print("Handshake successful!")
+            return True
+        
+        except Exception as e:
+            print(f"eError during handshake>: {e}")
+            return False
 
-            # Step 4: Send DES-encrypted message to Responder
-            des = DES(self.des_key)
+    def handle_receive_messages(self, client, des):
+        while True:
+            try:
+                message = client.recv(1024).decode()
+
+                if not message:
+                    break
+
+                decrypted_message = des.decrypt(message)
+                print(f"\t\t\t\t\t{decrypted_message}")
+
+            except ConnectionError:
+                break
             
-            cipherkey = self.rsa.encrypt(self.des_key, self.keys["private_key"])
-            encrypted_des_key = self.rsa.encrypt(cipherkey, self.public_keys["responder"])
-            s.sendall(encrypted_des_key.encode())
+    def send_des_key(self, client):        
+        cipher_des_key = self.rsa.encrypt(self.des_key, self.keys["private_key"])
+        encrypted_des_key = self.rsa.encrypt(cipher_des_key, self.public_keys["responder"])
+        client.sendall(encrypted_des_key.encode())
 
-            message = input("Enter message to send: ")
-            des_encrypted_message = des.encrypt(message)
-            s.sendall(des_encrypted_message.encode())
+    def start_initiator(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.responder_host, self.responder_port))
+            print(f"<connected to responder at {self.responder_host}:{self.responder_port}>")
 
-            # Step 5: Receive DES-encrypted reply
-            des_reply = s.recv(1024).decode()
-            decrypted_reply = des.decrypt(des_reply)
-            print(f"Responder replied: {decrypted_reply}")
+            response = self.get_responder_public_key("responder")
+            if response['status'] == "error":
+                print("<failed to retrieve responder's public key from PKA>")
+                return
+            else:
+                self.public_keys["responder"] = response['message']
+            
+            print(f"<responder public key>: {self.public_keys['responder']}")
 
-# Example Usage
+            if self.handle_handshake(s):
+                print("<handshake successful>")
+                
+                des = DES(self.des_key)
+                self.send_des_key(s)
+
+                threading.Thread(target=self.handle_receive_messages, args=(s, des)).start()
+
+                while True:
+                    try:
+                        message = input()
+                        
+                        if message.lower() == "exit":
+                            break
+
+                        des_encrypted_message = des.encrypt(message)
+                        s.sendall(des_encrypted_message.encode())
+                        
+                    except KeyboardInterrupt:
+                        print("<connection interrupted>")
+                        break
+
+                    except ConnectionError:
+                        print("<no connection available>")
+                        break
+
+                print("<exiting>")
+                s.close()
+
 if __name__ == "__main__":
-    des_key = "keyganmk"  # Example DES key (must be 8 bytes)
+    des_key = "keyganmk"
     initiator = Initiator("initiator", des_key)
 
-    initiator.initiate_handshake_and_exchange()
+    initiator.start_initiator()
