@@ -69,7 +69,7 @@ class PublicKeyAuthority:
                 print("<public keys>:", pka.public_keys)
                 
                 response, src = self.handle_request(client)
-                ciphertext = self.rsa.encrypt(response.to_json(), self.public_keys[src])
+                ciphertext = self.rsa.encrypt(response.to_json(), self.keys["private_key"])
 
                 client.sendall(ciphertext.encode())
 

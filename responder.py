@@ -52,7 +52,7 @@ class Responder:
             s.sendall(cipher_request.encode())
 
             response = s.recv(1024).decode()
-            decrypted_response = self.rsa.decrypt(response)
+            decrypted_response = self.rsa.decrypt(response, self.public_keys["pka"])
 
         return json.loads(decrypted_response)
 
@@ -115,10 +115,9 @@ class Responder:
             decrypted_des_key = self.rsa.decrypt(encrypted_des_key)
             des_key = self.rsa.decrypt(decrypted_des_key, self.public_keys["initiator"])
 
-            des = DES(des_key)
             print(f"<DES key received>")
 
-            return des
+            return des_key
 
         except Exception as e:
             print(f"<error getting DES key>: {e}")
@@ -135,7 +134,8 @@ class Responder:
             if self.handle_handshake(client):
                 print("<handshake successful>")
 
-                des = self.get_des_key(client)
+                des_key = self.get_des_key(client)
+                des = DES(des_key)
 
                 threading.Thread(target=self.handle_receive_messages, args=(client, des)).start()
 

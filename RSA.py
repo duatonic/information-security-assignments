@@ -56,7 +56,7 @@ class RSA:
 
     def encrypt(self, message, key=None):
         if key is None:
-            e, n = self.keys["public_key"]
+            e, n = self.keys["private_key"]
         else:
             e, n = key
 

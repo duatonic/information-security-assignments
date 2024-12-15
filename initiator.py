@@ -53,7 +53,7 @@ class Initiator:
             s.sendall(cipher_request.encode())
 
             response = s.recv(1024).decode()
-            decrypted_response = self.rsa.decrypt(response)
+            decrypted_response = self.rsa.decrypt(response, self.public_keys["pka"])
 
         return json.loads(decrypted_response)
     
